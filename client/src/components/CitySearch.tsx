@@ -1,12 +1,7 @@
-/* Data-Driven Expedition Interface Design
- * - City/Country search with autocomplete
- * - Open-Meteo Geocoding API integration
- * - Real-time search results
- */
-
 import { useState, useEffect, useRef } from 'react';
-import { Input } from '@/components/ui/input';
-import { Search, MapPin, Loader2 } from 'lucide-react';
+import { TextInput, Paper, Text, Group, Stack, UnstyledButton, Loader, Box } from '@mantine/core';
+import { IconSearch, IconMapPin } from '@tabler/icons-react';
+import { useClickOutside } from '@mantine/hooks';
 
 interface SearchResult {
   name: string;
@@ -26,7 +21,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  const searchRef = useClickOutside(() => setShowResults(false));
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -54,6 +49,8 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
           }));
           setResults(formattedResults);
           setShowResults(true);
+        } else {
+          setResults([]);
         }
       } catch (error) {
         console.error('Search error:', error);
@@ -66,18 +63,6 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowResults(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const handleSelect = (result: SearchResult) => {
     onSelect(result);
     setQuery('');
@@ -85,54 +70,60 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
   };
 
   return (
-    <div ref={searchRef} className="relative w-full">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="도시 또는 국가 검색..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => query.length >= 2 && setShowResults(true)}
-          className="pl-10 border-border"
-        />
-        {loading && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-        )}
-      </div>
+    <Box ref={searchRef} pos="relative" w="100%">
+      <TextInput
+        placeholder="도시 또는 국가 검색..."
+        leftSection={<IconSearch size={16} />}
+        rightSection={loading ? <Loader size="xs" /> : null}
+        value={query}
+        onChange={(e) => setQuery(e.currentTarget.value)}
+        onFocus={() => query.length >= 2 && setShowResults(true)}
+        radius="md"
+      />
 
-      {/* Search Results Dropdown */}
-      {showResults && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded shadow-lg z-50 max-h-64 overflow-y-auto">
-          {results.map((result, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleSelect(result)}
-              className="w-full px-4 py-3 text-left hover:bg-muted border-b border-border last:border-0 transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm">{result.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {result.admin1 && `${result.admin1}, `}
-                    {result.country}
-                  </div>
-                  <div className="text-[10px] font-mono text-muted-foreground mt-1">
-                    {result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+      {showResults && (
+        <Paper
+          pos="absolute"
+          top="100%"
+          left={0}
+          right={0}
+          mt="xs"
+          shadow="md"
+          withBorder
+          radius="md"
+          style={{ zIndex: 1000, overflow: 'hidden' }}
+        >
+          {results.length > 0 ? (
+            <Stack gap={0}>
+              {results.map((result, idx) => (
+                <UnstyledButton
+                  key={idx}
+                  onClick={() => handleSelect(result)}
+                  p="sm"
+                  style={(theme) => ({
+                    borderBottom: idx !== results.length - 1 ? `1px solid ${theme.colors.gray[2]}` : 'none',
+                    '&:hover': { backgroundColor: theme.colors.gray[0] }
+                  })}
+                >
+                  <Group gap="sm" wrap="nowrap">
+                    <IconMapPin size={18} color="gray" style={{ flexShrink: 0 }} />
+                    <Stack gap={2}>
+                      <Text size="sm" fw={500}>{result.name}</Text>
+                      <Text size="xs" c="dimmed">
+                        {result.admin1 && `${result.admin1}, `}{result.country}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </UnstyledButton>
+              ))}
+            </Stack>
+          ) : query.length >= 2 && !loading ? (
+            <Box p="md">
+              <Text size="sm" c="dimmed" ta="center">검색 결과가 없습니다</Text>
+            </Box>
+          ) : null}
+        </Paper>
       )}
-
-      {showResults && query.length >= 2 && results.length === 0 && !loading && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded p-4 text-center text-sm text-muted-foreground">
-          검색 결과가 없습니다
-        </div>
-      )}
-    </div>
+    </Box>
   );
 }
