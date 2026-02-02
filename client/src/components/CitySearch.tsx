@@ -34,16 +34,24 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
       setLoading(true);
       try {
-        // Photon API (OpenStreetMap 기반) 사용 - 한국어 및 전세계 검색에 매우 강력함
+        // Photon API 테스트 결과 lang=ko 파라미터가 400 에러를 유발함
+        // 기본 언어로 검색하고 결과에서 이름을 처리하도록 수정
         const response = await fetch(
-          `https://photon.komoot.io/api/?q=${encodeURIComponent(debouncedQuery)}&limit=10&lang=ko`
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(debouncedQuery)}&limit=10`
         );
+        
+        if (!response.ok) {
+          throw new Error('Search API response not ok');
+        }
+        
         const data = await response.json();
 
         if (data.features && data.features.length > 0) {
           const formattedResults = data.features.map((feature: any) => {
             const props = feature.properties;
             const coords = feature.geometry.coordinates;
+            
+            // 한국어 검색 시 name이 한국어로 오는 경우가 많으므로 우선 사용
             return {
               name: props.name || props.city || props.state || 'Unknown',
               admin1: props.state || props.district,
@@ -56,7 +64,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
           setResults(formattedResults);
           setShowResults(true);
         } else {
-          // Photon에서 결과가 없을 경우 Open-Meteo로 백업 검색
+          // Photon 결과 없을 시 Open-Meteo 백업 (한국어 지원)
           const backupResponse = await fetch(
             `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedQuery)}&count=5&language=ko`
           );
@@ -79,6 +87,26 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
         }
       } catch (error) {
         console.error('Search error:', error);
+        // 에러 발생 시에도 백업 시도
+        try {
+          const backupResponse = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedQuery)}&count=5&language=ko`
+          );
+          const backupData = await backupResponse.json();
+          if (backupData.results) {
+            setResults(backupData.results.map((r: any) => ({
+              name: r.name,
+              admin1: r.admin1,
+              country: r.country,
+              latitude: r.latitude,
+              longitude: r.longitude,
+              country_code: r.country_code,
+            })));
+            setShowResults(true);
+          }
+        } catch (e) {
+          console.error('Backup search error:', e);
+        }
       } finally {
         setLoading(false);
       }
