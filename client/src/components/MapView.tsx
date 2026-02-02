@@ -1,13 +1,6 @@
-/* Data-Driven Expedition Interface Design
- * - Leaflet.js interactive world map
- * - Click to select destination
- * - Minimal styling with 1px borders
- */
-
 import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect } from 'react';
 import L from 'leaflet';
 
 // Fix for default marker icons in React-Leaflet
@@ -25,8 +18,14 @@ interface MapViewProps {
 
 function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
   useMapEvents({
-    click: async (e) => {
-      const { lat, lng } = e.latlng;
+    click: (e) => {
+      // Normalize longitude to be within -180 to 180
+      const lat = e.latlng.lat;
+      let lng = e.latlng.lng;
+      
+      // Wrap longitude
+      lng = ((lng + 180) % 360 + 360) % 360 - 180;
+      
       onLocationSelect(lat, lng);
     },
   });
@@ -43,7 +42,7 @@ export default function MapView({ onLocationSelect, selectedLocation }: MapViewP
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
       );
       const data = await response.json();
-      const locationName = data.address?.city || data.address?.country || data.display_name || 'Unknown Location';
+      const locationName = data.address?.city || data.address?.town || data.address?.village || data.address?.country || data.display_name || 'Unknown Location';
       onLocationSelect(lat, lng, locationName);
     } catch (error) {
       console.error('Geocoding error:', error);
@@ -59,6 +58,7 @@ export default function MapView({ onLocationSelect, selectedLocation }: MapViewP
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
         className="z-0"
+        worldCopyJump={true}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
