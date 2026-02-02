@@ -1,12 +1,5 @@
-/* Data-Driven Expedition Interface Design
- * - Weather data display with temperature visualization
- * - OpenWeatherMap API integration
- * - Monospace fonts for numerical data
- * - Clean 1px borders and minimal styling
- */
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Cloud, Droplets, Wind, Eye, AlertCircle } from 'lucide-react';
+import { Paper, Text, Group, Stack, SimpleGrid, Title, Loader, Alert, Box, rem } from '@mantine/core';
+import { IconCloud, IconDroplets, IconWind, IconEye, IconAlertCircle, IconTemperature } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 interface WeatherData {
@@ -67,49 +60,35 @@ export default function WeatherCard({ lat, lng }: WeatherCardProps) {
 
   if (loading) {
     return (
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle className="text-lg">날씨 정보</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 animate-pulse">
-            <div className="h-16 bg-muted rounded"></div>
-            <div className="h-4 bg-muted rounded w-3/4"></div>
-            <div className="h-4 bg-muted rounded w-1/2"></div>
-          </div>
-        </CardContent>
-      </Card>
+      <Paper withBorder p="md" radius="md" h="100%">
+        <Stack align="center" justify="center" h={200}>
+          <Loader size="md" />
+          <Text size="sm" c="dimmed">날씨 정보를 불러오는 중...</Text>
+        </Stack>
+      </Paper>
     );
   }
 
   if (error) {
     return (
-      <Card className="h-full border-border">
-        <CardHeader className="border-b border-border pb-3">
-          <CardTitle className="text-lg font-bold">날씨 정보</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-red-700">{error}</div>
-          </div>
-        </CardContent>
-      </Card>
+      <Paper withBorder p="md" radius="md" h="100%">
+        <Alert icon={<IconAlertCircle size={16} />} title="오류" color="red">
+          {error}
+        </Alert>
+      </Paper>
     );
   }
 
   if (!weather) return null;
 
-  // Temperature color based on value
   const getTempColor = (temp: number) => {
-    if (temp < 10) return 'text-blue-600';
-    if (temp < 20) return 'text-cyan-600';
-    if (temp < 25) return 'text-green-600';
-    if (temp < 30) return 'text-yellow-600';
-    return 'text-orange-600';
+    if (temp < 10) return 'blue.6';
+    if (temp < 20) return 'cyan.6';
+    if (temp < 25) return 'green.6';
+    if (temp < 30) return 'yellow.7';
+    return 'orange.7';
   };
 
-  // Weather description in Korean
   const getWeatherDescription = (desc: string): string => {
     const descriptions: { [key: string]: string } = {
       'Clear': '맑음',
@@ -132,53 +111,65 @@ export default function WeatherCard({ lat, lng }: WeatherCardProps) {
   };
 
   return (
-    <Card className="h-full border-border">
-      <CardHeader className="border-b border-border pb-3">
-        <CardTitle className="text-lg font-bold">날씨 정보</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        {/* Temperature Display */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className={`text-4xl font-mono font-bold ${getTempColor(weather.temp)}`}>
+    <Paper withBorder p="md" radius="md" shadow="xs" bg="white">
+      <Stack gap="md">
+        <Group justify="space-between" style={{ borderBottom: '1px solid #eee', paddingBottom: rem(10) }}>
+          <Title order={4}>날씨 정보</Title>
+          <IconCloud size={20} color="gray" />
+        </Group>
+
+        <Group justify="space-between" align="center">
+          <Stack gap={0}>
+            <Text size={rem(36)} fw={700} c={getTempColor(weather.temp)} style={{ fontFamily: 'monospace' }}>
               {weather.temp.toFixed(1)}°C
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
+            </Text>
+            <Text size="sm" c="dimmed" fw={500}>
               {getWeatherDescription(weather.description)}
-            </div>
-          </div>
-          <Cloud className="w-12 h-12 text-muted-foreground" />
-        </div>
+            </Text>
+          </Stack>
+          <Box>
+            <img 
+              src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`} 
+              alt="weather icon"
+              style={{ width: rem(64), height: rem(64) }}
+            />
+          </Box>
+        </Group>
 
-        {/* Weather Details */}
-        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
-          <div className="flex items-center gap-2">
-            <Droplets className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <div className="text-xs text-muted-foreground">습도</div>
-              <div className="font-mono font-medium">{weather.humidity.toFixed(0)}%</div>
-            </div>
-          </div>
+        <SimpleGrid cols={2} spacing="md" pt="md" style={{ borderTop: '1px solid #eee' }}>
+          <Group gap="xs">
+            <IconDroplets size={18} color="var(--mantine-color-blue-5)" />
+            <Box>
+              <Text size="xs" c="dimmed">습도</Text>
+              <Text size="sm" fw={600}>{weather.humidity.toFixed(0)}%</Text>
+            </Box>
+          </Group>
           
-          <div className="flex items-center gap-2">
-            <Wind className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <div className="text-xs text-muted-foreground">풍속</div>
-              <div className="font-mono font-medium">{weather.wind_speed.toFixed(1)} m/s</div>
-            </div>
-          </div>
+          <Group gap="xs">
+            <IconWind size={18} color="var(--mantine-color-gray-5)" />
+            <Box>
+              <Text size="xs" c="dimmed">풍속</Text>
+              <Text size="sm" fw={600}>{weather.wind_speed.toFixed(1)} m/s</Text>
+            </Box>
+          </Group>
 
-          <div className="flex items-center gap-2">
-            <div className="text-sm">체감</div>
-            <div className="font-mono font-medium">{weather.feels_like.toFixed(1)}°C</div>
-          </div>
+          <Group gap="xs">
+            <IconTemperature size={18} color="var(--mantine-color-orange-5)" />
+            <Box>
+              <Text size="xs" c="dimmed">체감</Text>
+              <Text size="sm" fw={600}>{weather.feels_like.toFixed(1)}°C</Text>
+            </Box>
+          </Group>
 
-          <div className="flex items-center gap-2">
-            <Eye className="w-4 h-4 text-muted-foreground" />
-            <div className="font-mono font-medium">{(weather.visibility / 1000).toFixed(1)} km</div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          <Group gap="xs">
+            <IconEye size={18} color="var(--mantine-color-cyan-5)" />
+            <Box>
+              <Text size="xs" c="dimmed">가시거리</Text>
+              <Text size="sm" fw={600}>{(weather.visibility / 1000).toFixed(1)} km</Text>
+            </Box>
+          </Group>
+        </SimpleGrid>
+      </Stack>
+    </Paper>
   );
 }

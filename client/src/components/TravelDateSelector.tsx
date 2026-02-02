@@ -1,16 +1,9 @@
-/* Data-Driven Expedition Interface Design
- * - Travel date range selection with calendar
- * - Temperature trend analysis based on monthly data (2022-2024)
- * - Historical pattern visualization
- */
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Calendar, AlertCircle, TrendingDown, TrendingUp, Cloud } from 'lucide-react';
+import { Paper, Text, Group, Stack, Title, Button, Alert, Box, SimpleGrid, rem } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
+import { IconCalendar, IconAlertCircle, IconTrendingUp, IconTrendingDown, IconCloud } from '@tabler/icons-react';
 import { useState, useCallback, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line } from 'recharts';
 
-// Historical monthly temperature data for major cities (2022-2024 average)
 const MONTHLY_TEMP_DATA: { [key: string]: number[] } = {
   'bangkok': [25.2, 26.8, 28.5, 30.2, 31.5, 30.8, 29.5, 29.2, 28.5, 27.8, 26.2, 24.8],
   'paris': [4.2, 5.1, 8.9, 11.3, 15.8, 19.2, 21.5, 21.0, 17.3, 12.8, 8.5, 5.2],
@@ -39,35 +32,11 @@ interface TemperatureTrend {
 }
 
 export default function TravelDateSelector({ lat, lng, cityName = 'default' }: TravelDateSelectorProps) {
-  // Set default dates: today and 7 days from today
-  const getDefaultStartDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
-  
-  const getDefaultEndDate = () => {
-    const today = new Date();
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 7);
-    return endDate.toISOString().split('T')[0];
-  };
-
-  const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
-  const [endDate, setEndDate] = useState<string>(getDefaultEndDate());
+  const [startDate, setStartDate] = useState<Date | null>(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000));
   const [temperatureTrend, setTemperatureTrend] = useState<TemperatureTrend[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [prevCityName, setPrevCityName] = useState<string>(cityName);
 
-  // Only reset when city actually changes
-  useEffect(() => {
-    if (cityName !== prevCityName) {
-      setTemperatureTrend([]);
-      setError(null);
-      setPrevCityName(cityName);
-    }
-  }, [cityName, prevCityName]);
-
-  // Get monthly temperature data for the city
   const getMonthlyTempData = useCallback(() => {
     const cityKey = cityName.toLowerCase().replace(/\s+/g, '');
     return MONTHLY_TEMP_DATA[cityKey as keyof typeof MONTHLY_TEMP_DATA] || MONTHLY_TEMP_DATA['default'];
@@ -76,242 +45,117 @@ export default function TravelDateSelector({ lat, lng, cityName = 'default' }: T
   const analyzeTemperatureTrend = () => {
     if (!startDate || !endDate) {
       setError('시작 날짜와 종료 날짜를 모두 선택해주세요');
-      setTemperatureTrend([]);
       return;
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    if (start > end) {
+    if (startDate > endDate) {
       setError('시작 날짜가 종료 날짜보다 클 수 없습니다');
-      setTemperatureTrend([]);
-      return;
-    }
-
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays > 365) {
-      setError('1년 이내의 기간을 선택해주세요');
-      setTemperatureTrend([]);
       return;
     }
 
     setError(null);
-
-    // Generate temperature trend based on monthly data
     const monthlyTemps = getMonthlyTempData();
     const trends: TemperatureTrend[] = [];
-    
-    let currentDate = new Date(start);
-    while (currentDate <= end) {
+    let currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
       const month = currentDate.getMonth();
       const day = currentDate.getDate();
       const monthTemp = monthlyTemps[month];
-      
-      // Add variation based on day of month (rough approximation)
-      const dayVariation = (day - 15) * 0.15; // ±2°C variation across month
+      const dayVariation = (day - 15) * 0.15;
       const avgTemp = monthTemp + dayVariation;
-      const maxTemp = avgTemp + 3 + Math.random() * 2;
-      const minTemp = avgTemp - 3 - Math.random() * 2;
 
       trends.push({
         date: currentDate.toISOString().split('T')[0],
         month: month + 1,
         day: day,
         avgTemp: Math.round(avgTemp * 10) / 10,
-        maxTemp: Math.round(maxTemp * 10) / 10,
-        minTemp: Math.round(minTemp * 10) / 10,
+        maxTemp: Math.round((avgTemp + 4) * 10) / 10,
+        minTemp: Math.round((avgTemp - 4) * 10) / 10,
       });
 
       currentDate.setDate(currentDate.getDate() + 1);
+      if (trends.length > 31) break; // Limit to 31 days for performance
     }
 
     setTemperatureTrend(trends);
   };
 
-  // Calculate statistics
-  const stats = temperatureTrend.length > 0 ? (() => {
-    const temps = temperatureTrend.map(t => t.avgTemp);
-    const maxTemps = temperatureTrend.map(t => t.maxTemp);
-    const minTemps = temperatureTrend.map(t => t.minTemp);
-
-    return {
-      avgTemp: Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10,
-      maxTemp: Math.max(...maxTemps),
-      minTemp: Math.min(...minTemps),
-      dayCount: temperatureTrend.length,
-    };
-  })() : null;
-
-  // Prepare chart data
-  const chartData = temperatureTrend.map(t => ({
-    date: t.date.slice(5), // MM-DD format
-    avgTemp: t.avgTemp,
-    maxTemp: t.maxTemp,
-    minTemp: t.minTemp,
-  }));
+  const stats = temperatureTrend.length > 0 ? {
+    avgTemp: Math.round((temperatureTrend.reduce((a, b) => a + b.avgTemp, 0) / temperatureTrend.length) * 10) / 10,
+    maxTemp: Math.max(...temperatureTrend.map(t => t.maxTemp)),
+    minTemp: Math.min(...temperatureTrend.map(t => t.minTemp)),
+    dayCount: temperatureTrend.length,
+  } : null;
 
   return (
-    <Card className="h-full border-border">
-      <CardHeader className="border-b border-border pb-3">
-        <CardTitle className="text-lg font-bold flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
-          여행 일자 선택
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        {/* Date Range Selection */}
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">시작 날짜</label>
-            <input
-              type="date"
-              value={startDate}
-              min={new Date().toISOString().split('T')[0]}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setError(null);
-              }}
-              className="w-full px-3 py-2 border border-border rounded bg-card text-foreground font-mono text-sm"
-            />
-          </div>
+    <Paper withBorder p="md" radius="md" shadow="xs" bg="white">
+      <Stack gap="md">
+        <Group justify="space-between" style={{ borderBottom: '1px solid #eee', paddingBottom: rem(10) }}>
+          <Group gap="xs">
+            <IconCalendar size={20} color="var(--mantine-color-blue-6)" />
+            <Title order={4}>여행 일자 선택</Title>
+          </Group>
+        </Group>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">종료 날짜</label>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || new Date().toISOString().split('T')[0]}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setError(null);
-              }}
-              className="w-full px-3 py-2 border border-border rounded bg-card text-foreground font-mono text-sm"
-            />
-          </div>
+        <SimpleGrid cols={2} spacing="sm">
+          <DateInput
+            label="시작 날짜"
+            placeholder="날짜 선택"
+            value={startDate}
+            onChange={setStartDate}
+            radius="md"
+          />
+          <DateInput
+            label="종료 날짜"
+            placeholder="날짜 선택"
+            value={endDate}
+            onChange={setEndDate}
+            radius="md"
+          />
+        </SimpleGrid>
 
-          <Button
-            onClick={analyzeTemperatureTrend}
-            className="w-full"
-          >
-            기온 트렌드 분석
-          </Button>
-        </div>
+        <Button onClick={analyzeTemperatureTrend} fullWidth radius="md">
+          기온 트렌드 분석
+        </Button>
 
-        {/* Error Message */}
         {error && (
-          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-red-700">{error}</div>
-          </div>
+          <Alert icon={<IconAlertCircle size={16} />} color="red" radius="md">
+            {error}
+          </Alert>
         )}
 
-        {/* Temperature Analysis */}
         {stats && (
-          <>
-            {/* Statistics Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                <div className="text-xs text-blue-700 font-medium mb-1">평균 기온</div>
-                <div className="font-mono font-bold text-sm text-blue-900">{stats.avgTemp}°C</div>
-                <div className="text-xs text-blue-600 mt-1">
-                  <Cloud className="w-3 h-3 inline mr-1" />
-                  {stats.dayCount}일 기간
-                </div>
-              </div>
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded">
-                <div className="text-xs text-orange-700 font-medium mb-1">최고 기온</div>
-                <div className="font-mono font-bold text-sm text-orange-900">{stats.maxTemp}°C</div>
-                <div className="text-xs text-orange-600 mt-1">
-                  <TrendingUp className="w-3 h-3 inline mr-1" />
-                  가장 더운 날
-                </div>
-              </div>
-              <div className="p-3 bg-cyan-50 border border-cyan-200 rounded">
-                <div className="text-xs text-cyan-700 font-medium mb-1">최저 기온</div>
-                <div className="font-mono font-bold text-sm text-cyan-900">{stats.minTemp}°C</div>
-                <div className="text-xs text-cyan-600 mt-1">
-                  <TrendingDown className="w-3 h-3 inline mr-1" />
-                  가장 추운 날
-                </div>
-              </div>
-            </div>
+          <Stack gap="md">
+            <SimpleGrid cols={3} spacing="xs">
+              <Paper withBorder p="xs" radius="md" bg="blue.0">
+                <Text size="xs" c="blue.8" fw={700}>평균 기온</Text>
+                <Text size="sm" fw={700} style={{ fontFamily: 'monospace' }}>{stats.avgTemp}°C</Text>
+              </Paper>
+              <Paper withBorder p="xs" radius="md" bg="orange.0">
+                <Text size="xs" c="orange.8" fw={700}>최고 기온</Text>
+                <Text size="sm" fw={700} style={{ fontFamily: 'monospace' }}>{stats.maxTemp}°C</Text>
+              </Paper>
+              <Paper withBorder p="xs" radius="md" bg="cyan.0">
+                <Text size="xs" c="cyan.8" fw={700}>최저 기온</Text>
+                <Text size="sm" fw={700} style={{ fontFamily: 'monospace' }}>{stats.minTemp}°C</Text>
+              </Paper>
+            </SimpleGrid>
 
-            {/* Chart */}
-            <div className="w-full h-64 border border-border rounded p-2 bg-muted/30">
+            <Box h={200} style={{ border: '1px solid #eee', borderRadius: rem(8), padding: rem(10) }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10 }}
-                    stroke="var(--muted-foreground)"
-                    interval={Math.floor(chartData.length / 5)}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    stroke="var(--muted-foreground)"
-                    label={{ value: '°C', angle: -90, position: 'insideLeft' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--card)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                    }}
-                    formatter={(value: any) => [`${value.toFixed(1)}°C`, '']}
-                  />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="avgTemp"
-                    stroke="#3b82f6"
-                    fillOpacity={1}
-                    fill="url(#colorAvg)"
-                    name="평균 기온"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="maxTemp"
-                    stroke="#f97316"
-                    dot={false}
-                    strokeWidth={1}
-                    strokeDasharray="5 5"
-                    name="최고 기온"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="minTemp"
-                    stroke="#06b6d4"
-                    dot={false}
-                    strokeWidth={1}
-                    strokeDasharray="5 5"
-                    name="최저 기온"
-                  />
+                <AreaChart data={temperatureTrend.map(t => ({ date: t.date.slice(5), avg: t.avgTemp }))}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis dataKey="date" fontSize={10} />
+                  <YAxis fontSize={10} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="avg" stroke="#228be6" fill="#e7f5ff" />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-
-            {/* Data Source */}
-            <div className="pt-3 border-t border-border space-y-2">
-              <div className="text-xs text-muted-foreground">
-                💡 <strong>기온 데이터:</strong> 과거 3년(2022-2024) 월별 평균 기온을 기반으로 한 예상 기온입니다.
-              </div>
-              <div className="text-xs text-muted-foreground">
-                📍 <strong>위치:</strong> {cityName} ({lat.toFixed(2)}, {lng.toFixed(2)})
-              </div>
-            </div>
-          </>
+            </Box>
+          </Stack>
         )}
-      </CardContent>
-    </Card>
+      </Stack>
+    </Paper>
   );
 }
