@@ -26,7 +26,6 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
   useEffect(() => {
     const fetchResults = async () => {
-      // 한 글자 검색도 허용하도록 변경 (한국어 특성 고려)
       if (debouncedQuery.trim().length < 1) {
         setResults([]);
         setShowResults(false);
@@ -35,27 +34,48 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
       setLoading(true);
       try {
-        // Open-Meteo Geocoding API 사용
+        // Photon API (OpenStreetMap 기반) 사용 - 한국어 및 전세계 검색에 매우 강력함
         const response = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedQuery)}&count=10&language=ko&format=json`
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(debouncedQuery)}&limit=10&lang=ko`
         );
         const data = await response.json();
 
-        if (data.results && data.results.length > 0) {
-          const formattedResults = data.results.map((result: any) => ({
-            name: result.name,
-            admin1: result.admin1,
-            country: result.country,
-            latitude: result.latitude,
-            longitude: result.longitude,
-            country_code: result.country_code,
-          }));
+        if (data.features && data.features.length > 0) {
+          const formattedResults = data.features.map((feature: any) => {
+            const props = feature.properties;
+            const coords = feature.geometry.coordinates;
+            return {
+              name: props.name || props.city || props.state || 'Unknown',
+              admin1: props.state || props.district,
+              country: props.country,
+              latitude: coords[1],
+              longitude: coords[0],
+              country_code: props.countrycode || '',
+            };
+          });
           setResults(formattedResults);
           setShowResults(true);
         } else {
-          // 한국어 검색 결과가 없을 경우 영문 검색 시도 (예: 서울 -> Seoul)
-          setResults([]);
-          setShowResults(true);
+          // Photon에서 결과가 없을 경우 Open-Meteo로 백업 검색
+          const backupResponse = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedQuery)}&count=5&language=ko`
+          );
+          const backupData = await backupResponse.json();
+          
+          if (backupData.results) {
+            const backupResults = backupData.results.map((result: any) => ({
+              name: result.name,
+              admin1: result.admin1,
+              country: result.country,
+              latitude: result.latitude,
+              longitude: result.longitude,
+              country_code: result.country_code,
+            }));
+            setResults(backupResults);
+            setShowResults(true);
+          } else {
+            setResults([]);
+          }
         }
       } catch (error) {
         console.error('Search error:', error);
@@ -69,14 +89,14 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
   const handleSelect = (result: SearchResult) => {
     onSelect(result);
-    setQuery(result.name); // 선택한 이름으로 입력창 업데이트
+    setQuery(result.name);
     setShowResults(false);
   };
 
   return (
     <Box ref={searchRef} pos="relative" w="100%">
       <TextInput
-        placeholder="도시 또는 국가 검색 (예: 서울, Tokyo, France)"
+        placeholder="도시 또는 국가 검색 (예: 서울, 도쿄, 파리)"
         leftSection={<IconSearch size={16} />}
         rightSection={loading ? <Loader size="xs" /> : null}
         value={query}
@@ -126,8 +146,6 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
             <Box p="md">
               <Text size="sm" c="dimmed" ta="center">
                 '{debouncedQuery}'에 대한 검색 결과가 없습니다.
-                <br />
-                영문 이름으로 검색해 보세요. (예: Seoul)
               </Text>
             </Box>
           ) : null}
