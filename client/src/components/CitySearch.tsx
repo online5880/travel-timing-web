@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { TextInput, Paper, Text, Group, Stack, UnstyledButton, Loader, Box } from '@mantine/core';
 import { IconSearch, IconMapPin } from '@tabler/icons-react';
-import { useClickOutside } from '@mantine/hooks';
+import { useClickOutside, useDebouncedValue } from '@mantine/hooks';
 
 interface SearchResult {
   name: string;
@@ -18,6 +18,7 @@ interface CitySearchProps {
 
 export default function CitySearch({ onSelect }: CitySearchProps) {
   const [query, setQuery] = useState('');
+  const [debouncedQuery] = useDebouncedValue(query, 300);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -25,7 +26,8 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
   useEffect(() => {
     const fetchResults = async () => {
-      if (query.length < 2) {
+      // 한 글자 검색도 허용하도록 변경 (한국어 특성 고려)
+      if (debouncedQuery.trim().length < 1) {
         setResults([]);
         setShowResults(false);
         return;
@@ -33,12 +35,13 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
 
       setLoading(true);
       try {
+        // Open-Meteo Geocoding API 사용
         const response = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=ko`
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedQuery)}&count=10&language=ko&format=json`
         );
         const data = await response.json();
 
-        if (data.results) {
+        if (data.results && data.results.length > 0) {
           const formattedResults = data.results.map((result: any) => ({
             name: result.name,
             admin1: result.admin1,
@@ -50,7 +53,9 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
           setResults(formattedResults);
           setShowResults(true);
         } else {
+          // 한국어 검색 결과가 없을 경우 영문 검색 시도 (예: 서울 -> Seoul)
           setResults([]);
+          setShowResults(true);
         }
       } catch (error) {
         console.error('Search error:', error);
@@ -59,26 +64,26 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
       }
     };
 
-    const timer = setTimeout(fetchResults, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
+    fetchResults();
+  }, [debouncedQuery]);
 
   const handleSelect = (result: SearchResult) => {
     onSelect(result);
-    setQuery('');
+    setQuery(result.name); // 선택한 이름으로 입력창 업데이트
     setShowResults(false);
   };
 
   return (
     <Box ref={searchRef} pos="relative" w="100%">
       <TextInput
-        placeholder="도시 또는 국가 검색..."
+        placeholder="도시 또는 국가 검색 (예: 서울, Tokyo, France)"
         leftSection={<IconSearch size={16} />}
         rightSection={loading ? <Loader size="xs" /> : null}
         value={query}
         onChange={(e) => setQuery(e.currentTarget.value)}
-        onFocus={() => query.length >= 2 && setShowResults(true)}
+        onFocus={() => query.length >= 1 && setShowResults(true)}
         radius="md"
+        size="md"
       />
 
       {showResults && (
@@ -88,7 +93,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
           left={0}
           right={0}
           mt="xs"
-          shadow="md"
+          shadow="xl"
           withBorder
           radius="md"
           style={{ zIndex: 1000, overflow: 'hidden' }}
@@ -97,7 +102,7 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
             <Stack gap={0}>
               {results.map((result, idx) => (
                 <UnstyledButton
-                  key={idx}
+                  key={`${result.latitude}-${result.longitude}-${idx}`}
                   onClick={() => handleSelect(result)}
                   p="sm"
                   style={(theme) => ({
@@ -106,9 +111,9 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
                   })}
                 >
                   <Group gap="sm" wrap="nowrap">
-                    <IconMapPin size={18} color="gray" style={{ flexShrink: 0 }} />
+                    <IconMapPin size={18} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
                     <Stack gap={2}>
-                      <Text size="sm" fw={500}>{result.name}</Text>
+                      <Text size="sm" fw={600}>{result.name}</Text>
                       <Text size="xs" c="dimmed">
                         {result.admin1 && `${result.admin1}, `}{result.country}
                       </Text>
@@ -117,9 +122,13 @@ export default function CitySearch({ onSelect }: CitySearchProps) {
                 </UnstyledButton>
               ))}
             </Stack>
-          ) : query.length >= 2 && !loading ? (
+          ) : debouncedQuery.length >= 1 && !loading ? (
             <Box p="md">
-              <Text size="sm" c="dimmed" ta="center">검색 결과가 없습니다</Text>
+              <Text size="sm" c="dimmed" ta="center">
+                '{debouncedQuery}'에 대한 검색 결과가 없습니다.
+                <br />
+                영문 이름으로 검색해 보세요. (예: Seoul)
+              </Text>
             </Box>
           ) : null}
         </Paper>
